@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Minus, Leaf, Clock } from 'lucide-react';
 import { supabase, MenuItem } from '../lib/supabase';
 import { useCart } from '../contexts/CartContext';
@@ -13,11 +13,7 @@ export const Home = () => {
   const { } = useAuth();
   const { addNotification } = useNotification();
 
-  useEffect(() => {
-    fetchMenuItems();
-  }, []);
-
-  const fetchMenuItems = async () => {
+  const fetchMenuItems = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('menu_items')
@@ -33,7 +29,26 @@ export const Home = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [addNotification]);
+
+  useEffect(() => {
+    fetchMenuItems();
+
+    const subscription = supabase
+      .channel('menu-items-home-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'menu_items'
+      }, () => {
+        fetchMenuItems();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchMenuItems]);
 
   const filteredItems = menuItems.filter(item => item.category === selectedCategory);
 

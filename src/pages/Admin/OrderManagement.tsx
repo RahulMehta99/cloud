@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Bell, Clock, Package } from 'lucide-react';
 import { supabase, Order } from '../../lib/supabase';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -9,22 +9,7 @@ export const OrderManagement = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const { addNotification } = useNotification();
 
-  useEffect(() => {
-    fetchOrders();
-    const subscription = supabase
-      .channel('orders')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-        addNotification('New order received!', 'info');
-        fetchOrders();
-      })
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('orders')
@@ -39,7 +24,29 @@ export const OrderManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchOrders();
+
+    const subscription = supabase
+      .channel('orders-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'orders'
+      }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          addNotification('New order received!', 'info');
+        }
+        fetchOrders();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchOrders, addNotification]);
 
   const updateOrderStatus = async (id: string, status: string) => {
     try {

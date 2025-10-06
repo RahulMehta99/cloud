@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 
 interface Notification {
   id: string;
@@ -26,7 +26,11 @@ export const useNotification = () => {
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const addNotification = (message: string, type: Notification['type']) => {
+  const removeNotification = useCallback((id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const addNotification = useCallback((message: string, type: Notification['type']) => {
     const id = Date.now().toString();
     const notification: Notification = {
       id,
@@ -40,11 +44,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     setTimeout(() => {
       removeNotification(id);
     }, 5000);
-  };
-
-  const removeNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
+  }, [removeNotification]);
 
   return (
     <NotificationContext.Provider value={{ notifications, addNotification, removeNotification }}>

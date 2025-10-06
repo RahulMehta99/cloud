@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, CreditCard as Edit2, Trash2, X, Upload } from 'lucide-react';
 import { supabase, MenuItem } from '../../lib/supabase';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -24,11 +24,7 @@ export const MenuManagement = () => {
     is_vegetarian: false,
   });
 
-  useEffect(() => {
-    fetchMenuItems();
-  }, []);
-
-  const fetchMenuItems = async () => {
+  const fetchMenuItems = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('menu_items')
@@ -43,7 +39,26 @@ export const MenuManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [addNotification]);
+
+  useEffect(() => {
+    fetchMenuItems();
+
+    const subscription = supabase
+      .channel('menu-items-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'menu_items'
+      }, () => {
+        fetchMenuItems();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchMenuItems]);
 
   const uploadImage = async (file: File): Promise<string> => {
     try {

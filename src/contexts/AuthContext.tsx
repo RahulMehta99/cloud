@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase, User as UserProfile } from '../lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { signUpSchema, signInSchema, guestInfoSchema } from '../lib/validations';
@@ -40,7 +40,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  // Fetch user profile from DB
+  const fetchProfile = async (userId: string) => {
     try {
       const { data: profile, error } = await supabase
         .from('users')
@@ -75,52 +76,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // console.error('Unexpected profile fetch error:', error);
       setUserProfile(null);
     }
-  }, []);
+  };
 
+  // Listen for auth changes and fetch profile
   useEffect(() => {
     let mounted = true;
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      (async () => {
-        if (!mounted) return;
-
-        if (session?.user) {
-          setUser(session.user);
-          setIsGuest(false);
-          setGuestInfo(null);
-          await fetchProfile(session.user.id);
-          if (mounted) setLoading(false);
-        } else {
-          setUser(null);
-          setUserProfile(null);
-          setGuestInfo(null);
-          setIsGuest(false);
-          if (mounted) setLoading(false);
+    let initialLoadDone = false;
+    
+    const handleAuth = async (_event: string, session: any) => {
+      if (!mounted) return;
+      
+      if (session?.user) {
+        setUser(session.user);
+        setIsGuest(false);
+        setGuestInfo(null);
+        await fetchProfile(session.user.id);
+        if (mounted) setLoading(false);
+      } else {
+        setUser(null);
+        setUserProfile(null);
+        setGuestInfo(null);
+        setIsGuest(false);
+        if (mounted) setLoading(false);
+      }
+    };
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuth);
+    
+    // Get initial session only once
+    if (!initialLoadDone) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (mounted) {
+          initialLoadDone = true;
+          handleAuth('INITIAL_SESSION', session);
         }
-      })();
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      (async () => {
-        if (!mounted) return;
-
-        if (session?.user) {
-          setUser(session.user);
-          setIsGuest(false);
-          setGuestInfo(null);
-          await fetchProfile(session.user.id);
-          if (mounted) setLoading(false);
-        } else {
-          if (mounted) setLoading(false);
-        }
-      })();
-    });
-
+      });
+    }
+    
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchProfile]);
+  }, []);
 
   // Auth actions
   const signUp = async (email: string, password: string, fullName: string, phone: string) => {

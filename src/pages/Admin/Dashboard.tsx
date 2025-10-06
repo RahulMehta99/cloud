@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { TrendingUp, Package, DollarSign, Clock, ShoppingBag, Users, Calendar } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -28,7 +28,23 @@ export const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const { addNotification } = useNotification();
 
-  const fetchDashboardData = useCallback(async () => {
+  useEffect(() => {
+    fetchDashboardData();
+    
+    // Set up real-time subscription for orders
+    const subscription = supabase
+      .channel('dashboard-orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchDashboardData();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchDashboardData = async () => {
     try {
       // Get today's date range
       const today = new Date();
@@ -124,22 +140,7 @@ export const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [addNotification]);
-
-  useEffect(() => {
-    fetchDashboardData();
-
-    const subscription = supabase
-      .channel('dashboard-orders-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchDashboardData();
-      })
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [fetchDashboardData]);
+  };
 
   const getStatusColor = (status: string) => {
     const colors: { [key: string]: string } = {
